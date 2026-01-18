@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>Textsuche per Kamera</title>
+
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+
+<style>
+body {
+    font-family: Arial, sans-serif;
+    background: #111;
+    color: #fff;
+    text-align: center;
+}
+video, canvas {
+    width: 90%;
+    max-width: 400px;
+    margin: 10px 0;
+    border: 2px solid #444;
+}
+input {
+    width: 80%;
+    padding: 8px;
+    font-size: 16px;
+}
+#history {
+    margin-top: 15px;
+    text-align: left;
+    max-width: 400px;
+    margin-left: auto;
+    margin-right: auto;
+}
+.found {
+    border-bottom: 1px solid #444;
+    padding: 5px 0;
+    font-size: 14px;
+}
+</style>
+</head>
+
+<body>
+
+<h2>📷 Kamera Textsuche</h2>
+
+<video id="video" autoplay muted></video>
+<canvas id="canvas" hidden></canvas>
+
+<br>
+<input id="hotword" placeholder="Hotwords (z.B. test,exit,alarm)">
+
+<p id="status">Warte auf Kamera…</p>
+
+<div id="history"></div>
+
+<audio id="sound" src="music.mp3"></audio>
+
+<script>
+const video = document.getElementById("video");
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+const status = document.getElementById("status");
+const sound = document.getElementById("sound");
+const history = document.getElementById("history");
+
+let lastFound = {};
+
+navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+.then(stream => video.srcObject = stream)
+.catch(() => status.innerText = "❌ Kamera nicht verfügbar");
+
+async function scan() {
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    ctx.drawImage(video, 0, 0);
+
+    status.innerText = "🔍 Erkenne Text…";
+
+    const result = await Tesseract.recognize(canvas, "deu+eng");
+    const text = result.data.text.toLowerCase();
+
+    status.innerText = "✅ Bereit";
+
+    const words = document.getElementById("hotword").value
+        .toLowerCase()
+        .split(",")
+        .map(w => w.trim())
+        .filter(w => w.length);
+
+    words.forEach(word => {
+        if (text.includes(word)) {
+            if (!lastFound[word]) {
+                lastFound[word] = true;
+                sound.play();
+
+                const time = new Date().toLocaleString("de-DE", {
+                    weekday: "long",
+                    year: "numeric",
+                    month: "long",
+                    day: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    second: "2-digit"
+                });
+
+                const div = document.createElement("div");
+                div.className = "found";
+                div.innerText = `🔔 "${word}" – ${time}`;
+                history.prepend(div);
+            }
+        } else {
+            lastFound[word] = false;
+        }
+    });
+}
+
+setInterval(scan, 2500);
+</script>
+
+</body>
+</html>
