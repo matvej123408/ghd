@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Live OCR PWA</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0b0b0b">
+<link rel="manifest" href="manifest.json">
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<style>
+body{background:#0b0b0b;color:#fff;font-family:Arial;text-align:center}
+video{width:90%;max-width:480px;border:2px solid #333;margin-top:10px}
+button,input{margin:6px;padding:8px;font-size:15px}
+#history{max-width:480px;margin:15px auto;text-align:left}
+.entry{border-bottom:1px solid #333;padding:4px 0;font-size:14px}
+</style>
+</head>
+<body>
+
+<h2>📱 Live OCR PWA</h2>
+<button onclick="startCamera()">📷 Camera</button>
+<button onclick="startScreen()">🖥 Screen</button><br>
+<input id="hotwords" placeholder="Hotwords: alarm,exit,test">
+<video id="video" autoplay muted></video>
+<canvas id="canvas" hidden></canvas>
+<div id="history"></div>
+<audio id="sound" src="music.mp3"></audio>
+
+<script>
+if('serviceWorker'in navigator){navigator.serviceWorker.register('sw.js')}
+const video=document.getElementById("video")
+const canvas=document.getElementById("canvas")
+const ctx=canvas.getContext("2d")
+const sound=document.getElementById("sound")
+const history=document.getElementById("history")
+let stream,lastSpoken={},speaking=false
+
+async function startCamera(){
+ if(stream)stream.getTracks().forEach(t=>t.stop())
+ stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}})
+ video.srcObject=stream
+}
+async function startScreen(){
+ if(stream)stream.getTracks().forEach(t=>t.stop())
+ stream=await navigator.mediaDevices.getDisplayMedia({video:{frameRate:30}})
+ video.srcObject=stream
+}
+function speak(t){
+ if(speaking)return
+ speaking=true
+ const u=new SpeechSynthesisUtterance(t)
+ u.lang="en-US"
+ u.onend=()=>speaking=false
+ speechSynthesis.cancel()
+ speechSynthesis.speak(u)
+}
+async function scan(){
+ if(!video.videoWidth)return
+ const s=0.6
+ canvas.width=video.videoWidth*s
+ canvas.height=video.videoHeight*s
+ ctx.drawImage(video,0,0,canvas.width,canvas.height)
+ const r=await Tesseract.recognize(canvas,"eng",{logger:()=>{}})
+ const text=r.data.text.toLowerCase()
+ const words=document.getElementById("hotwords").value.toLowerCase().split(",").map(w=>w.trim()).filter(Boolean)
+ words.forEach(w=>{
+  if(text.includes(w)){
+   sound.currentTime=0; sound.play()
+   if(!lastSpoken[w]||Date.now()-lastSpoken[w]>2000){
+    lastSpoken[w]=Date.now(); speak(w)
+    const time=new Date().toLocaleString("de-DE",{weekday:"long",year:"numeric",month:"long",day:"numeric",hour:"2-digit",minute:"2-digit",second:"2-digit"})
+    const d=document.createElement("div")
+    d.className="entry"
+    d.innerText=`🔔 "${w}" – ${time}`
+    history.prepend(d)
+   }
+  }
+ })
+}
+setInterval(scan,2500)
+</script>
+</body>
+</html>
